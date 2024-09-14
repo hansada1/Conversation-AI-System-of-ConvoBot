@@ -1,0 +1,243 @@
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+import re
+import wikipedia
+import requests
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+
+app = Flask(__name__)
+
+# Add your Google Custom Search Engine ID and API key
+CSE_ID = "553d562247e854a5d"
+API_KEY = "AIzaSyC0OXEZYoQTlD-RipouZLzRq4neAn0QxQ4"
+
+# Define sources for different roles
+role_sources = {
+    'doctor': [
+        "https://pubmed.ncbi.nlm.nih.gov",
+        "https://www.uptodate.com",
+        "https://www.medscape.com"
+    ],
+    'business expert': [
+        "https://hbr.org",
+        "https://www.investopedia.com",
+        "https://www.forbes.com"
+    ],
+    'counselor': [
+        "https://www.counseling.org",
+        "https://www.psychologytoday.com",
+        "https://www.mindtools.com"
+    ],
+    'lawyer': [
+        "https://www.americanbar.org",
+        "https://www.findlaw.com",
+        "https://www.justia.com"
+    ],
+    'engineer': [
+        "https://ieeexplore.ieee.org",
+        "https://www.engineering.com",
+        "https://www.asme.org"
+    ],
+    'teacher': [
+        "https://www.edutopia.org",
+        "https://www.teachthought.com",
+        "https://www.educationworld.com"
+    ]
+}
+
+# Configure the SQLAlchemy part of the app instance
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'your_secret_key'  # Needed for session management
+
+# Create the SQLAlchemy db instance
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+# Define the User model
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+
+# Define the ChatHistory model
+class ChatHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_message = db.Column(db.String, nullable=False)  # Changed from user_input to user_message
+    bot_response = db.Column(db.String, nullable=False)
+    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
+
+    # Relationship to User
+    user = db.relationship('User', backref=db.backref('chat_history', lazy=True))
+
+# Initialize the database
+with app.app_context():
+    db.create_all()
+
+@app.route('/')
+def index():
+    if 'username' in session:
+        return render_template('index.html', username=session['username'])
+    return redirect(url_for('login'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        if not username or not password:
+            return jsonify(message="Username and password cannot be empty."), 400
+
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify(message="Username already exists."), 400
+
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+        new_user = User(username=username, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        return redirect(url_for('login'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            session['username'] = username
+            return redirect(url_for('index'))
+        else:
+            return jsonify(message="Invalid username or password."), 401
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('login'))
+
+@app.route('/get-response', methods=['POST'])
+def get_response():
+    if 'username' not in session:
+        return jsonify(message="Please log in first."), 403
+
+    user_message = request.json.get('message', '').strip()  # Fetch user_message instead of user_input
+    if not user_message:
+        return jsonify(message="Input cannot be empty."), 400
+
+    bot_response = handle_bot_response(user_message)
+
+    # Save chat history to the database
+    user = User.query.filter_by(username=session['username']).first()
+    if user:
+        new_history = ChatHistory(user_id=user.id, user_message=user_message, bot_response=bot_response)
+        db.session.add(new_history)
+        db.session.commit()
+
+    return jsonify(response=bot_response)
+
+
+@app.route('/get-history', methods=['GET'])
+def get_history():
+    if 'username' not in session:
+        return jsonify(message="Please log in first."), 403
+
+    user = User.query.filter_by(username=session['username']).first()
+    if user:
+        history = ChatHistory.query.filter_by(user_id=user.id).all()
+        history_list = [{'user_message': h.user_message, 'bot_response': h.bot_response, 'timestamp': h.timestamp} for h in history]
+        return jsonify(history=history_list)
+    return jsonify(history=[])
+
+
+def handle_bot_response(user_input):
+    """Handle the bot's response logic"""
+    if "hi" in user_input.lower() or "hello" in user_input.lower():
+        return f"Hi there, {session['username']}! How can I help you today?"
+    elif "how are you" in user_input.lower():
+        return "I'm just a bot, but I'm doing great! How about you?"
+    elif "bye" in user_input.lower():
+        return "Goodbye! Have a nice day!"
+    elif is_math_operation(user_input):
+        try:
+            return f"The result is: {eval_math_expression(user_input)}"
+        except Exception as e:
+            return f"Error in computing the result: {str(e)}"
+    else:
+        role = identify_role(user_input)
+        if role:
+            return generate_role_based_response(role, user_input)
+        return fetch_information(user_input) or "I couldn't understand. Please rephrase."
+
+def is_math_operation(user_input):
+    return re.search(r'\b[-+]?(\d+(\.\d+)?|\(\d+(\.\d+)?\))(\s*[-+*/]\s*[-+]?\d+(\.\d+)?)+\b', user_input)
+
+def eval_math_expression(expression):
+    """Safely evaluate mathematical expressions"""
+    allowed_names = {
+        'abs': abs,
+        'round': round,
+        'min': min,
+        'max': max,
+        'pow': pow,
+        'int': int,
+        'float': float
+    }
+    return eval(expression, {"__builtins__": None}, allowed_names)
+
+def identify_role(user_input):
+    role_keywords = {
+        'doctor': ['health', 'sick', 'ill', 'doctor', 'medicine', 'disease', 'symptoms'],
+        'business expert': ['business', 'market', 'strategy', 'sales', 'profit', 'management'],
+        'counselor': ['stress', 'relationship', 'mental health', 'anxiety', 'depression'],
+        'lawyer': ['law', 'legal', 'contract', 'court', 'agreement', 'rights'],
+        'engineer': ['engineering', 'technology', 'design', 'mechanics', 'electronics'],
+        'teacher': ['education', 'teaching', 'learning', 'student', 'school', 'lesson']
+    }
+
+    tokens = user_input.lower().split()
+    for role, keywords in role_keywords.items():
+        if any(keyword in tokens for keyword in keywords):
+            return role
+    return None
+
+def generate_role_based_response(role, user_input):
+    if role:
+        information = fetch_information(user_input, role)
+        return f"As a {role}, here's what I found: {information}"
+    return "Could you provide more details about your situation?"
+
+def fetch_information(query, role=None):
+    """Fetch relevant information from Wikipedia or Google"""
+    if role and role in role_sources:
+        search_query = f"{query} site:{' OR site:'.join(role_sources[role])}"
+    else:
+        search_query = query
+
+    try:
+        summary = wikipedia.summary(query, sentences=5)
+        return summary
+    except wikipedia.DisambiguationError as e:
+        return f"Your query is ambiguous. Did you mean: {', '.join(e.options[:5])}?"
+    except wikipedia.PageError:
+        return "Sorry, I couldn't find any information on that topic."
+    except Exception:
+        pass
+
+    try:
+        url = f"https://www.googleapis.com/customsearch/v1?q={search_query}&cx={CSE_ID}&key={API_KEY}"
+        response = requests.get(url)
+        search_results = response.json()
+        if 'items' in search_results:
+            return search_results['items'][0]['snippet']
+    except Exception as e:
+        return f"An error occurred while searching: {str(e)}"
+    
+if __name__ == '__main__':
+    app.run(debug=True)

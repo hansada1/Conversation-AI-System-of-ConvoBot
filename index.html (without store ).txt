@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <title>ConvoBot</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--background);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            color: var(--text-color);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Theme Variables */
+        :root {
+            --background: linear-gradient(135deg, #667eea, #764ba2);
+            --container-bg: #fff;
+            --header-bg: #764ba2;
+            --input-bg: #f1f1f1;
+            --text-color: #333;
+            --button-bg: #667eea;
+            --chat-bg: #f9f9f9;
+            --chat-user-bg: #667eea;
+            --chat-bot-bg: #e2e2e2;
+            --history-bg: #f3f3f3;
+            --card-bg: #fff;
+            --card-border: #ddd;
+        }
+
+        body.dark {
+            --background: linear-gradient(135deg, #232526, #414345);
+            --container-bg: #2b2b2b;
+            --header-bg: #3b3b3b;
+            --input-bg: #404040;
+            --text-color: #ddd;
+            --button-bg: #565656;
+            --chat-bg: #333;
+            --chat-user-bg: #4a4a4a;
+            --chat-bot-bg: #565656;
+            --history-bg: #2b2b2b;
+            --card-bg: #3b3b3b;
+            --card-border: #555;
+        }
+
+        .main-container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+        }
+
+        .chat-container {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background: var(--container-bg);
+            border-radius: 0 0 15px 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            transition: background 0.3s;
+        }
+
+        .chat-header {
+            background: var(--header-bg);
+            padding: 20px;
+            color: white;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: var(--chat-bg);
+            transition: background 0.3s;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #eee;
+            background-color: var(--container-bg);
+            transition: background 0.3s;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            outline: none;
+            margin-right: 10px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .chat-input button {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.3s;
+        }
+
+        .chat-input button img {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Chat Messages */
+        .chat-message {
+    margin-bottom: 15px;
+    padding: 12px 15px;
+    border-radius: 20px;
+    display: inline-block;
+    max-width: 80%;
+    line-height: 1.4;
+    font-size: 14px;
+    transition: background 0.3s, color 0.3s;
+    clear: both;
+}
+
+.chat-message.user {
+    background-color: var(--chat-user-bg);
+    color: white;
+    float: right;
+    text-align: right;
+    border-bottom-right-radius: 0;
+}
+
+.chat-message.bot {
+    background-color: var(--chat-bot-bg);
+    color: var(--text-color);
+    float: left;
+    text-align: left;
+    border-bottom-left-radius: 0;
+}
+
+        /* Scrollbar Styling */
+        .chat-box::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-box::-webkit-scrollbar-thumb {
+            background-color: var(--button-bg);
+            border-radius: 10px;
+        }
+
+        .chat-box::-webkit-scrollbar-track {
+            background-color: var(--input-bg);
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: white;
+        }
+
+        /* Conversation History Section */
+        .history-section {
+            flex: 1;
+            background-color: var(--history-bg);
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            transition: background 0.3s;
+        }
+
+        .history-section h2 {
+            text-align: center;
+            margin-bottom: 15px;
+            color: var(--text-color);
+        }
+
+        .history-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s, border-color 0.3s;
+        }
+
+        .history-card .history-content {
+            max-width: 85%;
+        }
+
+        .history-card .history-content p {
+            margin: 0;
+            line-height: 1.4;
+            font-size: 14px;
+        }
+
+        .history-card .history-icon {
+            font-size: 24px;
+            color: var(--button-bg);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>ConvoBot</h1>
+                <button id="theme-toggle" class="theme-toggle">🌙</button>
+            </div>
+            <div class="chat-box" id="chat-box">
+                <!-- Messages will appear here -->
+            </div>
+            <div class="chat-input">
+                <input type="text" id="user-input" placeholder="Type your message here..." autofocus>
+                <button id="send-btn">
+                    <img src="https://img.icons8.com/ios-filled/50/ffffff/paper-plane.png"/>
+                </button>
+            </div>
+        </div>
+
+        <!-- History Section -->
+        <div class="history-section">
+            <h2>Conversation History</h2>
+            <ul id="history-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('send-btn').addEventListener('click', function() {
+            sendMessage();
+        });
+    
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    
+        document.getElementById('theme-toggle').addEventListener('click', function() {
+            document.body.classList.toggle('dark');
+            const themeIcon = document.body.classList.contains('dark') ? '☀️' : '🌙';
+            this.textContent = themeIcon;
+        });
+    
+        function sendMessage() {
+            const userInput = document.getElementById('user-input').value;
+            if (userInput.trim() !== '') {
+                displayMessage(userInput, 'user');
+                document.getElementById('user-input').value = '';
+                
+                // Send the message to the backend for processing
+                fetch('/get-response', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: userInput })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displayMessage(data.response, 'bot');
+                    fetchHistory();
+                })
+                .catch(error => {
+                    displayMessage('Error: Unable to get a response from the bot.', 'bot');
+                });
+            }
+        }
+    
+        function displayMessage(message, sender) {
+            const chatBox = document.getElementById('chat-box');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-message', sender);
+            messageElement.textContent = message;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function fetchHistory() {
+            fetch('/get-history')
+                .then(response => response.json())
+                .then(data => {
+                    const historyList = document.getElementById('history-list');
+                    historyList.innerHTML = ''; // Clear existing history
+                    data.history.forEach(item => {
+                        const historyCard = document.createElement('li');
+                        historyCard.classList.add('history-card');
+
+                        const historyContent = document.createElement('div');
+                        historyContent.classList.add('history-content');
+                        historyContent.innerHTML = `<p>User: ${item.user}</p><p>Bot: ${item.bot}</p>`;
+
+                        const historyIcon = document.createElement('div');
+                        historyIcon.classList.add('history-icon');
+                        historyIcon.textContent = '💬';
+
+                        historyCard.appendChild(historyContent);
+                        historyCard.appendChild(historyIcon);
+                        historyList.appendChild(historyCard);
+                    });
+                });
+        }
+
+        // Load history on page load
+        fetchHistory();
+    </script>
+</body>
+</html>
